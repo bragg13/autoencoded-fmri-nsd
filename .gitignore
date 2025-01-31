@@ -1,10 +1,5 @@
 .venv/
-annotations/
-data/
-simple_autoencoder/__pycache__/
 .ropeproject/
-*.pyc
-*.DS_STORE
-panoptic_annotations/
-__pycache__/
-simple_autoencoder/experiments/
+dataset/coco/
+dataset/nsd_data/
+.mypy_cache/

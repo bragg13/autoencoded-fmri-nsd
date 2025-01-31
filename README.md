@@ -1,14 +1,17 @@
 # Neuroscience meets ML
-Artificial Intelligence for Games and Simulations - final project repository
+Building models to encode human brain.
 
-# How to run
+Originally, final project for Artificial Intelligence for Games and Simulations.
+
+## Setting up the environment
 1. Install python version 3.11.10
 ```bash
 # macosx
 brew install pyenv
 
-# windows powershell
+# windows powershell - not tested
 Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pyenv-win/pyenv-win/master/pyenv-win/install-pyenv-win.ps1" -OutFile "./install-pyenv-win.ps1"; &"./install-pyenv-win.ps1"
+
 
 # then
 pyenv install 3.11.10 # or 3.11.9 if .10 is not available
@@ -18,41 +21,50 @@ pyenv install 3.11.10 # or 3.11.9 if .10 is not available
 ```bash
 pyenv exec python3 -m venv .venv
 source .venv/bin/activate # macosx
-.venv-aigs/Scripts/activate # windows powershell
+
+.venv-aigs/Scripts/activate # windows powershell - not tested
 ```
 
 3. Install dependencies
-    ```bash
-    pip install -r requirements.txt
-    ```
+```bash
+pip install -r requirements.txt
+```
 
 4. Download datasets
+- create dataset structure
+```bash
+mkdir dataset
+mkdir dataset/coco/ dataset/nsd_data/
+```
+
 - download coco annotations
 ```bash
-mkdir annotations && cd annotations
+cd dataset/coco/
 wget http://images.cocodataset.org/annotations/annotations_trainval2017.zip
+wget http://images.cocodataset.org/annotations/panoptic_annotations_trainval2017.zip
 unzip annotations_trainval2017.zip
+unzip panoptic_annotations_trainval2017.zip
+rm annotations_trainval2017.zip annotations_trainval2017.zip
 ```
 
 - download algonauts dataset
-```bash
-...
+visit [Algonauts Challenge form](https://www.google.com/url?q=https%3A%2F%2Fdocs.google.com%2Fforms%2Fd%2Fe%2F1FAIpQLSehZkqZOUNk18uTjRTuLj7UYmRGz-OkdsU25AyO3Wm6iAb0VA%2Fviewform%3Fusp%3Dsf_link) and fill in the form to get access to the Google Drive folder containing the unzipped dataset for each subject.
+
+The resulting structure should be the following
+```
+dataset/
+  nsd_coco.csv
+  coco/
+    annotations/
+    panoptic_annotations/
+  nsd_data/
+    subj01/
+    ...
+    subj08/
 ```
 
-5. Run the code
-- for models
-    ```bash
-    python3 ae_main.py --config=configs/default.py # for simple AE
-    ```
-- for datasets
-    ```bash
-    ...
-    ```
-    there must be a `results` folder inside of the model project folder to save the results, otherwise it won't work.
+## Run the training
+...
 
-# How to join the coco and algonauts datasets
-
-The file `nsd_coco.csv`, taken directly from the NSD dataset, contains the following columns:
-- `index`: the image id of the coco dataset
-- `cocoId`: the image id of the coco dataset
-- `cocoSplit`: the image file name of the coco dataset
+## Run inference
+...
