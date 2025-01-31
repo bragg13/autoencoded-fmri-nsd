@@ -147,7 +147,7 @@ def evaluate_fun(state, evaluation_batch, key, config):
     return eval
 
 
-def train_and_evaluate(config):
+def train_and_evaluate(config, env_config):
     """Train and evaulate pipeline."""
     rng = random.key(0)
     rng, init_key = random.split(rng)

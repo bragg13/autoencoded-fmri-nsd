@@ -23,9 +23,6 @@ class Encoder(nn.Module):
                 use_running_average=not training, momentum=0.9, epsilon=1e-5
             )(x)
             x = nn.relu(x)
-            # x = nn.Dropout(
-            #             rate=self.dropout_rate,
-            #         )(x, deterministic=not training, rng=dropout_rng)
 
         # final layer
         x = nn.Dense(self.latent_dim, name=f"fc{len(layers_div)}")(x)
@@ -50,9 +47,6 @@ class Decoder(nn.Module):
                 use_running_average=not training, momentum=0.9, epsilon=1e-5
             )(z)
             z = nn.relu(z)
-            # z = nn.Dropout(
-            #             rate=self.dropout_rate,
-            #         )(z, deterministic=not training, rng=dropout_rng)
 
         # final layer
         z = nn.Dense(self.fmri_dim, name=f"fc{len(layers_div)}")(z)

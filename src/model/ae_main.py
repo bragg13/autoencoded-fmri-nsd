@@ -1,7 +1,6 @@
-"""Main file for running the AE example.
-
-This file is intentionally kept short. The majority for logic is in libraries
-that can be easily tested and imported in Colab.
+from .env import RESULTS_DIR
+"""
+Main file for running the AE example.
 """
 
 # from absl import app
@@ -13,7 +12,16 @@ from omegacli import OmegaConf
 import argparse
 import train
 import os
-PROJECT_DIR = '/Users/andrea/Desktop/aigs/simple_autoencoder/'
+from typing import TypedDict
+from dotenv import dotenv_values
+
+class EnvConfig(TypedDict):
+    PROJECT_DIR: str
+    NSD_DIR: str
+    COCO_DIR: str
+    RESULTS_DIR: str
+
+env_config: EnvConfig = dotenv_values(".env")
 
 def main(argv):
     # hide memory from tensorflow or it miht conflict with jax
@@ -31,22 +39,19 @@ def main(argv):
     parser.add_argument("--l1", dest='config.l1', type=float, default=0.1)
     parser.add_argument("--subject", dest='config.subject', type=int, default=3)
 
-    user_provided_args, default_args = OmegaConf.from_argparse(parser)
+    usr_args, default_args = OmegaConf.from_argparse(parser)
 
     # create the results folder
-    results_folder = f'results/subj{user_provided_args.config.subject}/{user_provided_args.config.ds}_latent{user_provided_args.config.latent_dim}_sparsity{user_provided_args.config.sparsity}_bs{user_provided_args.config.batch_size}_lOne{user_provided_args.config.l1}'
+    results_folder = f'{env_config.RESULTS_DIR}/subj{usr_args.config.subject}/{usr_args.config.ds}_latent{usr_args.config.latent_dim}_sparsity{usr_args.config.sparsity}_bs{usr_args.config.batch_size}_lOne{usr_args.config.l1}'
     os.makedirs(results_folder, exist_ok=True)
-    user_provided_args.config['results_folder'] = results_folder
+    usr_args.config['results_folder'] = results_folder
 
     # write the config to the results folder
-    print('lol')
     with open(f"{results_folder}/config", 'w') as f:
-        print('ao')
-        for key, value in user_provided_args.config.items():
-            print(key, value)
+        for key, value in usr_args.config.items():
             f.write(f'{key}:{value}\n')
 
-    train.train_and_evaluate(user_provided_args.config)
+    train.train_and_evaluate(usr_args.config, env_config)
 
 
 if __name__ == '__main__':

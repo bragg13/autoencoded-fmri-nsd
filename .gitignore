@@ -3,3 +3,5 @@
 dataset/coco/
 dataset/nsd_data/
 .mypy_cache/
+.env
+.DS_STORE
