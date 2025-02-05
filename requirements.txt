@@ -1,4 +1,11 @@
 absl-py==2.1.0
+aim==3.27.0
+aim-ui==3.27.0
+aimrecords==0.0.7
+aimrocks==0.5.2
+aiofiles==24.1.0
+alembic==1.14.1
+annotated-types==0.7.0
 antlr4-python3-runtime==4.9.3
 anyio==4.6.2.post1
 appnope==0.1.4
@@ -10,9 +17,13 @@ astunparse==1.6.3
 async-lru==2.0.4
 attrs==24.2.0
 babel==2.16.0
+base58==2.0.1
 beartype==0.19.0
 beautifulsoup4==4.12.3
 bleach==6.1.0
+boto3==1.36.13
+botocore==1.36.13
+cachetools==5.5.1
 certifi==2024.8.30
 cffi==1.17.1
 charset-normalizer==3.4.0
@@ -22,6 +33,7 @@ clu==0.0.12
 comm==0.2.2
 contextlib2==21.6.0
 contourpy==1.3.0
+cryptography==44.0.0
 cycler==0.12.1
 debugpy==1.8.7
 decorator==5.1.1
@@ -30,6 +42,7 @@ dm-tree==0.1.8
 docstring_parser==0.16
 etils==1.10.0
 executing==2.1.0
+fastapi==0.115.8
 fastjsonschema==2.20.0
 filelock==3.16.1
 flatbuffers==24.3.25
@@ -61,6 +74,7 @@ jaxlib==0.4.35
 jaxpruner @ git+https://github.com/google-research/jaxpruner@f133ee50f31a03d0152b8b272edb534065152f5d
 jedi==0.19.1
 Jinja2==3.1.4
+jmespath==1.0.1
 joblib==1.4.2
 json5==0.9.25
 jsonpointer==3.0.0
@@ -83,6 +97,7 @@ kiwisolver==1.4.7
 lazy_loader==0.4
 libclang==18.1.1
 lxml==5.3.0
+Mako==1.3.9
 Markdown==3.7
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2
@@ -132,6 +147,8 @@ pure_eval==0.2.3
 pyarrow==18.0.0
 pycocotools==2.0.8
 pycparser==2.22
+pydantic==2.10.6
+pydantic_core==2.27.2
 Pygments==2.18.0
 pyparsing==3.2.0
 python-dateutil==2.9.0.post0
@@ -142,10 +159,12 @@ PyYAML==6.0.2
 pyzmq==26.2.0
 referencing==0.35.1
 requests==2.32.3
+RestrictedPython==8.0
 rfc3339-validator==0.1.4
 rfc3986-validator==0.1.1
 rich==13.9.3
 rpds-py==0.20.0
+s3transfer==0.11.2
 scikit-image==0.24.0
 scikit-learn==1.5.2
 scipy==1.14.1
@@ -155,7 +174,9 @@ simple-parsing==0.1.6
 six==1.16.0
 sniffio==1.3.1
 soupsieve==2.6
+SQLAlchemy==2.0.37
 stack-data==0.6.3
+starlette==0.45.3
 sympy==1.13.1
 tenacity==9.0.0
 tensorboard==2.18.0
@@ -182,10 +203,12 @@ typing_extensions==4.12.2
 tzdata==2024.2
 uri-template==1.3.0
 urllib3==2.2.3
+uvicorn==0.34.0
 wcwidth==0.2.13
 webcolors==24.8.0
 webencodings==0.5.1
 websocket-client==1.8.0
+websockets==14.2
 Werkzeug==3.0.6
 widgetsnbextension==4.0.13
 wrapt==1.16.0

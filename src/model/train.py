@@ -1,41 +1,31 @@
 """Training and evaluation logic."""
 import aim
 import models
-from logger import log
 import jax
 from jax import random
 import jax.numpy as jnp
 import optax
 from tqdm import tqdm
-from nsd_data import (
-    get_train_test_datasets,
-    get_batches,
-    get_train_test_mnist,
-    get_train_test_cifar10,
-)
-from visualisations import (
-    plot_latent_heatmap,
-    visualize_latent_activations,
-    LatentVisualizer,
-    plot_losses,
-    plot_original_reconstruction_fmri,
-    plot_floc_bodies_values_distribution
-)
+from data.nsd_data import NSDDataLoader
 from flax.training import train_state
 from typing import Any
 import jaxpruner
 import ml_collections
 import orbax.checkpoint as ocp
-from ae_main import PROJECT_DIR
+# from ae_main import PROJECT_DIR
+import logging
+# from visual.visualisations import LatentVisualizer
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class TrainState(train_state.TrainState):
     batch_stats: Any
 
-
 def create_train_state(key, init_data, config, fmri_voxels):
     """Creates initial `TrainState`."""
-    model = models.model(config.latent_dim, fmri_voxels, dataset=config.ds)
+    model = models.model(config.latent_dim, fmri_voxels)
     variables = model.init(
         {"params": key, "dropout": key}, init_data, dropout_rng=key, training=True
     )
@@ -83,7 +73,7 @@ def train_step(state, batch, key, config):
         fmri_voxels = batch.shape[1]
         variables = {"params": params, "batch_stats": state.batch_stats}
         (recon_x, latent_vec), new_model_state = models.model(
-            config.latent_dim, fmri_voxels, dataset=config.ds
+            config.latent_dim, fmri_voxels
         ).apply(
             variables,
             batch,
@@ -132,7 +122,7 @@ def evaluate_fun(state, evaluation_batch, key, config):
     def eval_model(batch):
         variables = {"params": state.params, "batch_stats": state.batch_stats}
         (reconstruction, latent_vecs), _ = models.model(
-            config.latent_dim, batch.shape[1], dataset=config.ds
+            config.latent_dim, batch.shape[1]
         ).apply(
             variables,
             batch,
@@ -151,65 +141,57 @@ def train_and_evaluate(config, env_config):
     """Train and evaulate pipeline."""
     rng = random.key(0)
     rng, init_key = random.split(rng)
+    # PROJECT_DIR = env_config['PROJECT_DIR']
 
     # initialise AIM run
     run = aim.Run()
+    logger.info("AIM run initialized")
 
-    log("Initializing dataset...", "TRAIN")
+    # initialise dataset
+    logger.info("Initializing dataset...")
     rate_reconstruction_printing = 10
-    if config.ds == "fmri":
-        train_ds, validation_ds = get_train_test_datasets(
-            subject=config.subject, roi_class=config.roi_class, hem=config.hem
-        )
+    nsd_loader = NSDDataLoader(env_config["DATASET_DIR"], subject=config.subject, roi_class=config.roi_class, hem=config.hem)
+    train_ds, validation_ds = nsd_loader.get_train_test_datasets()
 
-    elif config.ds == "mnist":
-        train_ds, validation_ds = get_train_test_mnist()
-    else:
-        train_ds, validation_ds = get_train_test_cifar10()
-
-    print(f"training ds shape: {train_ds.shape}")
-    print(f"test ds shape: {validation_ds.shape}")
+    logger.info(f"training ds shape: {train_ds.shape}")
+    logger.info(f"test ds shape: {validation_ds.shape}")
 
     key1, key2 = random.split(rng)
-    train_loader = get_batches(train_ds, key1, config.batch_size)
-    validation_loader = get_batches(validation_ds, key2, config.batch_size)
+    train_loader = nsd_loader.get_batches(train_ds, key1, config.batch_size)
+    validation_loader = nsd_loader.get_batches(validation_ds, key2, config.batch_size)
 
     train_size = train_ds.shape[0]
     fmri_voxels = train_ds.shape[1]
 
-    log("Initializing model...", "TRAIN")
+    logger.info("Initializing model...")
     init_data = jnp.ones((config.batch_size, fmri_voxels), jnp.float32)
 
-    log("Initializing state...", "TRAIN")
+    logger.info("Initializing state...")
     state, sparsity_updater = create_train_state(
         init_key, init_data, config, fmri_voxels
     )
 
-    log(f"Calculating training steps per epochs (train_size: {train_size})...", "TRAIN")
+    logger.info(f"Calculating training steps per epochs (train_size: {train_size})...")
     steps_per_epoch = train_size // int(config.batch_size)
     if train_size % int(config.batch_size) != 0:
         steps_per_epoch += 1
-    log(f"{steps_per_epoch} steps for each ({config.num_epochs}) epoch", "TRAIN")
+    logger.info(f"{steps_per_epoch} steps for each ({config.num_epochs}) epoch")
 
-    log("\nstarting training", "TRAIN")
+    logger.info("\nstarting training")
     train_mse_losses = []
     train_spa_losses = []
     eval_losses = []
 
-    print(
-        "Train data stats:", train_loader.min(), train_loader.max(), train_loader.mean(), len(train_loader)
+    logger.info(
+        f"Train data stats: min={train_loader.min()}, max={train_loader.max()}, mean={train_loader.mean()}, len={len(train_loader)}"
     )
-    print(
-        "Validation data stats:",
-        validation_loader.min(),
-        validation_loader.max(),
-        validation_loader.mean(),
-        len(validation_loader)
+    logger.info(
+        f"Validation data stats: min={validation_loader.min()}, max={validation_loader.max()}, mean={validation_loader.mean()}, len={len(validation_loader)}"
     )
 
     # utils for visaulisation and checkpointing
-    visualizer = LatentVisualizer(config.results_folder)
-    checkpointer = ocp.StandardCheckpointer()
+    # visualizer = LatentVisualizer(config.results_folder)
+    # checkpointer = ocp.StandardCheckpointer()
     train_step_jit = jax.jit(train_step, static_argnums=3)
     evaluate_fun_jit = jax.jit(evaluate_fun, static_argnums=3)
 
@@ -233,8 +215,8 @@ def train_and_evaluate(config, env_config):
 
         # im reshuffling also the first time, which is useless but I think the code is cleaner
         key1, key2 = random.split(rng)
-        train_loader = get_batches(train_ds, key1, config.batch_size)
-        validation_loader = get_batches(validation_ds, key2, config.batch_size)
+        train_loader = nsd_loader.get_batches(train_ds, key1, config.batch_size)
+        validation_loader = nsd_loader.get_batches(validation_ds, key2, config.batch_size)
 
         # pre_op = jax.jit(sparsity_updater.pre_forward_update)
         post_op = jax.jit(sparsity_updater.post_gradient_update)
@@ -269,7 +251,7 @@ def train_and_evaluate(config, env_config):
                     evaluate_fun_jit(state, validation_batch, epoch_key, config)
                 )
 
-                visualizer.update(latent_vecs)
+                # visualizer.update(latent_vecs)
 
                 # average the training loss and append it to the list
                 train_mse_losses.append(jnp.mean(jnp.array(tmp_loss)))
@@ -300,23 +282,25 @@ def train_and_evaluate(config, env_config):
             # visualize_latent_activations(latent_vecs, evaluated_batches, config.results_folder,epoch)
             # plot_latent_heatmap(latent_vecs, evaluated_batches, config.results_folder,epoch)
 
+    run.close()
+
     # save model to disk TODO: use os for this!!
-    ckpt_folder = ocp.test_utils.erase_and_create_empty(
-        f"{PROJECT_DIR}/{config.results_folder}/checkpoints"
-    )
-    checkpointer.save(ckpt_folder / "final", state)
-    plot_losses(
-        train_mse_losses,
-        train_spa_losses,
-        config.results_folder,
-        eval_losses,
-        steps_per_epoch,
-    )
+    # ckpt_folder = ocp.test_utils.erase_and_create_empty(
+    #     f"{PROJECT_DIR}/{config.results_folder}/checkpoints"
+    # )
+    # checkpointer.save(ckpt_folder / "final", state)
+    # plot_losses(
+    #     train_mse_losses,
+    #     train_spa_losses,
+    #     config.results_folder,
+    #     eval_losses,
+    #     steps_per_epoch,
+    # )
     # plot_original_reconstruction_fmri(config.subject, evaluated_batches, reconstructions, config.hem)
-    visualize_latent_activations(
-        latent_vecs, evaluated_batches, config, epoch
-    )
-    plot_latent_heatmap(latent_vecs, evaluated_batches, config, epoch)
-    visualizer.plot_training_history()
-    plot_floc_bodies_values_distribution(train_ds, 'train')
-    plot_floc_bodies_values_distribution(validation_ds, 'validation')
+    # visualize_latent_activations(
+    #     latent_vecs, evaluated_batches, config, epoch
+    # )
+    # plot_latent_heatmap(latent_vecs, evaluated_batches, config, epoch)
+    # visualizer.plot_training_history()
+    # plot_floc_bodies_values_distribution(train_ds, 'train')
+    # plot_floc_bodies_values_distribution(validation_ds, 'validation')

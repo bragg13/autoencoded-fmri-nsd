@@ -3,10 +3,9 @@ import numpy as np
 import seaborn as sns
 from typing import Tuple, List
 import jax.numpy as jnp
-from surf_plot import plotRoiClassValues, SUBJECTS, plot_img, plotRoiClass
-from nsd_data import split_hemispheres, unmask_from_roi_class
+from visual.surf_plot import plotRoiClassValues, SUBJECTS, plot_img, plotRoiClass
+# from data.nsd_data import split_hemispheres, unmask_from_roi_class
 from typing import Literal
-from logger import log
 
 ds_sizes = {
     'mnist': (28, 28),
@@ -225,7 +224,7 @@ def plot_floc_bodies_values_distribution(split_data, split='train', fliers=False
 
         # Get Q1 and Q3 from the box PathPatch
         box_coords = boxplot_stats['boxes'][i].get_path().vertices
-        q1 = box_coords[0, 1] 
+        q1 = box_coords[0, 1]
         q3 = box_coords[2, 1]
 
         # Get fliers (outliers)

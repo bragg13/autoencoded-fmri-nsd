@@ -7,8 +7,7 @@ from nilearn import datasets
 from nilearn import plotting
 from nilearn import image
 import nibabel as nib
-from roi import ROI_TO_CLASS, CLASS_TO_ROI, load_roi_data
-from logger import log
+from data.roi import ROI_TO_CLASS, CLASS_TO_ROI, load_roi_data
 
 # %% download the dataset, this is also in nsd_data
 data_dir = '../data'
@@ -78,7 +77,7 @@ def get_roi_data(subj, roi_class, hemi):
 # map challenge space to fsaverage for roi of interest
 def map_fsaverage_resp(subj, fmri, img, roi, hemisphere: str, full_class=False):
     challenge_roi_class, fsaverage_roi_class, roi_map = get_roi_data(subj, ROI_TO_CLASS[roi], hemisphere)
-    if full_class: 
+    if full_class:
         fsvg_roi, ch_roi = fsaverage_roi_class, challenge_roi_class
     else:
         # Select the vertices corresponding to the ROI of interest
