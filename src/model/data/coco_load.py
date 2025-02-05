@@ -7,6 +7,7 @@ from skimage.transform import resize
 from collections import defaultdict
 import ast
 import logging
+import pickle
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -25,6 +26,12 @@ class CocoLoader:
         Load the nsd-coco csv file and preprocess it.
     """
     def _read_and_preprocess(self) -> pd.DataFrame:
+        if os.path.exists(f'{self.data_dir}/../nsd_coco_cleaned.csv'):
+            nsd_coco = pd.read_csv(f'{self.data_dir}/../nsd_coco_cleaned.csv')
+            logger.info(f'nsd-coco loaded: {len(nsd_coco)} images')
+            return nsd_coco
+
+        logger.info('nsd-coco not found, loading nsd-coco')
         useless_cols = ['Unnamed: 0', 'loss', 'flagged', 'BOLD5000',
                         'subject1_rep0', 'subject1_rep1', 'subject1_rep2',
                         'subject2_rep0', 'subject2_rep1', 'subject2_rep2',
@@ -36,15 +43,28 @@ class CocoLoader:
                         'subject8_rep0', 'subject8_rep1', 'subject8_rep2']
 
         # association between nsd and coco ids
-        nsd_coco = pd.read_csv(f'{self.data_dir}/../nsd_coco.csv')
+        nsd_coco = pd.read_csv(f'{self.data_dir}/../nsd_coco_full.csv')
         nsd_coco.drop(columns=useless_cols, inplace=True)
         logger.info(f'nsd-coco loaded: {len(nsd_coco)} images')
+        nsd_coco.to_csv(f'{self.data_dir}/../nsd_coco_cleaned.csv')
         return nsd_coco
 
     """
         Load the panoptic annotations for the coco dataset.
     """
     def _load_annotations(self):
+        if os.path.exists(f'{self.data_dir}/img_id_to_anns.json') and os.path.exists(f'{self.data_dir}/cat_id_to_cat.json'):
+            with open(f'{self.data_dir}/img_id_to_anns.json', 'rb') as f:
+                self.img_id_to_anns = pickle.load(f)
+                logger.info('dict *img_id_to_anns* loaded from file')
+
+            with open(f'{self.data_dir}/cat_id_to_cat.json', 'rb') as f:
+                self.cat_id_to_cat = pickle.load(f)
+                logger.info('dict *cat_id_to_cat* loaded from file')
+
+            return
+
+        logger.info('*img2anns* and *cat2cat* not found, loading annotations')
         ann_files = [f'{self.data_dir}/panoptic_annotations/panoptic_train2017.json',
                      f'{self.data_dir}/panoptic_annotations/panoptic_val2017.json']
         for ann_file in ann_files:
@@ -54,9 +74,12 @@ class CocoLoader:
                     self.img_id_to_anns[ann['image_id']].append(ann)
                 for cat in dataset['categories']:
                     self.cat_id_to_cat[cat['id']].append(cat)
-        logger.info('Annotations loaded')
-        logger.info(f'{type(self.img_id_to_anns)}')
-        # logger.info(f'{self.cat_id_to_cat}')
+        with open(f'{self.data_dir}/img_id_to_anns.json', 'wb') as f:
+            pickle.dump(self.img_id_to_anns, f)
+            logger.info('dict *img_id_to_anns* saved to file')
+        with open(f'{self.data_dir}/cat_id_to_cat.json', 'wb') as f:
+            pickle.dump(self.cat_id_to_cat, f)
+            logger.info('dict *cat_id_to_cat* saved to file')
 
 
     """

@@ -20,18 +20,32 @@ class NSDDataLoader:
         self.roi_class = roi_class
         self.hem = hem
         self.coco_loader = CocoLoader(data_dir)
-        self.images_to_nsd = self.images_to_nsd_df()
+        self.images_to_nsd = self.get_images_to_nsd_df()
 
 
-    def images_to_nsd_df(self):
+    def get_images_to_nsd_df(self):
         """
-            Load the nsd-coco csv file and preprocess it; return a dataframe with image indices and nsd ids.
+            Load the image list indices for a given subject.
+
+            Returns:
+                pd.DataFrame: DataFrame containing image list indices and corresponding nsd indices
         """
-        images_path = os.path.join(self.data_dir, f"subj0{self.subject}", "training_split", "training_images")
-        images = sorted(os.listdir(images_path))
-        images_to_nsd = {i: [i, int(filename.split('-')[1][:5])] for i, filename in enumerate(images)}
-        logger.info(f'Loaded {len(images_to_nsd)} images for subject {self.subject}')
-        return pd.DataFrame.from_dict(images_to_nsd, orient="index", columns=["listIdx", "nsdId"])
+        path_img2nsd = os.path.join(self.data_dir, f"subj0{self.subject}", "training_split", 'images_to_nsd.csv')
+        if os.path.exists(path_img2nsd):
+            return pd.read_csv(path_img2nsd)
+        else:
+            images_path = os.path.join(self.data_dir, f"subj0{self.subject}", "training_split", "training_images")
+            images = sorted(os.listdir(images_path))
+            images_to_nsd= {}
+            for i, filename in enumerate(images):
+                start_i = filename.find("nsd-") + len("nds-")
+                nsd_index = int(filename[start_i : start_i + 5])
+                images_to_nsd[i] = [i, nsd_index]
+            logger.info(f'Loaded {len(images_to_nsd)} images for subject {self.subject}')
+
+            df = pd.DataFrame.from_dict(images_to_nsd, orient="index", columns=["listIdx", "nsdId"])
+            df.to_csv(path_img2nsd, index=False)
+            return df
 
     def get_shared_indices(self, category='person'):
         """
