@@ -5,7 +5,6 @@ import pandas as pd
 from jax import random
 from sklearn.model_selection import train_test_split
 from data.roi import load_roi_data
-from typing import Literal
 import logging
 from data.coco_load import CocoLoader
 
@@ -19,8 +18,44 @@ class NSDDataLoader:
         self.data_dir = f"{ data_dir }/nsd_data"
         self.roi_class = roi_class
         self.hem = hem
-        self.coco_loader = CocoLoader(data_dir)
+
+        # not all images listed in the df are actually in the folder, so we need to adjust the df to only include the images that are actually in the folder
         self.images_to_nsd = self.get_images_to_nsd_df()
+
+        # this is the dataframe with the images and their information for each subject
+        if not os.path.exists(os.path.join(self.data_dir, f"subj0{self.subject}", "training_split", "subject_specific.csv")):
+            self.coco_loader = CocoLoader(data_dir, self.subject)
+            self.subject_specific_df = pd.merge(self.images_to_nsd, self.coco_loader.subject_coco_df, left_on="nsdId", right_on="nsdId", how="inner")
+            self.subject_shared_df = pd.merge(self.images_to_nsd, self.coco_loader.shared_coco_df, left_on="nsdId", right_on="nsdId", how="inner")
+
+            # now merge with the categories
+            self.subject_specific_df = pd.merge(self.subject_specific_df, self.coco_loader.categories_df, left_on="cocoId", right_on="cocoId", how="inner")
+            self.subject_shared_df = pd.merge(self.subject_shared_df, self.coco_loader.categories_df, left_on="cocoId", right_on="cocoId", how="inner")
+
+            # export to csv
+            self.subject_specific_df.to_csv(os.path.join(self.data_dir, f"subj0{self.subject}", "training_split", "subject_specific.csv"), index=False)
+            self.subject_shared_df.to_csv(os.path.join(self.data_dir, f"subj0{self.subject}", "training_split", "subject_shared.csv"), index=False)
+            del self.coco_loader
+
+        else:
+            self.subject_specific_df = pd.read_csv(os.path.join(self.data_dir, f"subj0{self.subject}", "training_split", "subject_specific.csv"))
+            self.subject_shared_df = pd.read_csv(os.path.join(self.data_dir, f"subj0{self.subject}", "training_split", "subject_shared.csv"))
+
+        self.get_df_info()
+
+
+    def get_df_info(self):
+        # number of shared images for this subject
+        num_specific = len(self.subject_specific_df)
+        num_shared = len(self.subject_shared_df)
+
+        # how many images in the specific have 'person' category
+        # num_person_specific = len(self.subject_specific_df[self.subject_specific_df['categories'].str.contains('person')])
+        # num_person_shared = len(self.subject_shared_df[self.subject_shared_df['categories'].str.contains('person')])
+
+        logger.info(f"Subject {self.subject} has {num_shared} shared images and {num_specific} specific images")
+        # logger.info(f"Subject {self.subject} has {num_person_shared} shared images and {num_person_specific} specific images with 'person' category")
+
 
 
     def get_images_to_nsd_df(self):
@@ -32,8 +67,10 @@ class NSDDataLoader:
         """
         path_img2nsd = os.path.join(self.data_dir, f"subj0{self.subject}", "training_split", 'images_to_nsd.csv')
         if os.path.exists(path_img2nsd):
+            logger.info(f'Found file **images_to_csd.csv* for subject. Loading image list indices from {path_img2nsd}')
             return pd.read_csv(path_img2nsd)
         else:
+            logger.info('File **images_to_csd.csv* not foudn for subject. Building image list indices...')
             images_path = os.path.join(self.data_dir, f"subj0{self.subject}", "training_split", "training_images")
             images = sorted(os.listdir(images_path))
             images_to_nsd= {}
@@ -57,22 +94,25 @@ class NSDDataLoader:
             Returns:
                 tuple: Two numpy arrays containing indices for shared images with and without the specified category respectively
         """
-        shared_df = self.coco_loader.get_shared_df().merge(self.images_to_nsd, on='nsdId')
+        shared_df = self.subject_shared_df
         shared_category, shared_not_category = self.coco_loader.split_by_category(shared_df, category)
         logger.info(f'Found {len(shared_category)} shared images with category {category}')
         return shared_category["listIdx"].values, shared_not_category["listIdx"].values
 
     def get_train_test_indices(self):
         """
-            Get the image indices for training and testing sets for a given subject.
-
             Returns:
                 tuple: Two numpy arrays containing train and test indices respectively:
                     - train_idxs (np.ndarray): Indices for training set (90% of data)
                     - test_idxs (np.ndarray): Indices for test set (10% of data)
         """
-        subject_images = pd.merge(self.images_to_nsd, self.coco_loader.get_subject_df(self.subject), on="nsdId", how="inner")
-        train_idxs, test_idxs = train_test_split(np.arange(len(subject_images)), test_size=0.1, random_state=42)
+        subject_df = self.subject_specific_df
+        logger.info(f'Loaded {len(subject_df)} images for subject {self.subject}')
+
+        # on training, we don't want to use shared images
+        subject_df = subject_df[subject_df['shared1000'] == False]
+        logger.info(f'Excluded shared images from training set. {len(subject_df)} images remaining')
+        train_idxs, test_idxs = train_test_split(np.arange(len(subject_df)), test_size=0.1, random_state=42)
         logger.info(f'Split data into {len(train_idxs)} training and {len(test_idxs)} testing indices')
         return train_idxs, test_idxs
 

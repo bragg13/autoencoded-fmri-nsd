@@ -4,4 +4,8 @@ dataset/coco/
 dataset/nsd_data/
 .mypy_cache/
 .env
-.DS_STORE
+.DS_Store
+.aim/
+src/model/__pycache__/
+src/model/data/__pycache__
+src/model/visual/__pycache__
