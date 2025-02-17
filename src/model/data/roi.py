@@ -16,7 +16,7 @@ ROI_TO_CLASS = {roi: roi_class for roi_class, rois in CLASS_TO_ROI.items() for r
 # List of all ROI names
 ROIS = [roi for roi_class in CLASS_TO_ROI.values() for roi in roi_class]
 
-def load_roi_data(subject=3):
+def load_roi_data(dataDir, subject=3):
     """
     Loads ROI data structures for specified subject
         Args:
@@ -24,7 +24,7 @@ def load_roi_data(subject=3):
         Returns:
             dict: Mapping, challenge and fsaverage space ROI data
     """
-    roi_dir = os.path.join('..', 'data', "subj0"+str(subject), "roi_masks")
+    roi_dir = os.path.join(dataDir, "subj0"+str(subject), "roi_masks")
 
     data = {'mapping' : {},
             'challenge' : {'lh' : {}, 'rh' : {}},

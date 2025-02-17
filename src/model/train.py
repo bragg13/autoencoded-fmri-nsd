@@ -12,7 +12,6 @@ from typing import Any
 import jaxpruner
 import ml_collections
 import orbax.checkpoint as ocp
-# from ae_main import PROJECT_DIR
 import logging
 # from visual.visualisations import LatentVisualizer
 
@@ -177,7 +176,6 @@ def train_and_evaluate(config, env_config):
         steps_per_epoch += 1
     logger.info(f"{steps_per_epoch} steps for each ({config.num_epochs}) epoch")
 
-    logger.info("\nstarting training")
     train_mse_losses = []
     train_spa_losses = []
     eval_losses = []
@@ -208,6 +206,8 @@ def train_and_evaluate(config, env_config):
         'roi_class': config.roi_class,
     }
 
+    logger.info("starting training")
+    print()
     for epoch in range(config.num_epochs):
         rng, epoch_key = jax.random.split(rng)
         validation_step = 0

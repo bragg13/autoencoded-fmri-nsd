@@ -67,7 +67,6 @@ class NSDDataLoader:
         """
         path_img2nsd = os.path.join(self.data_dir, f"subj0{self.subject}", "training_split", 'images_to_nsd.csv')
         if os.path.exists(path_img2nsd):
-            logger.info(f'Found file **images_to_csd.csv* for subject. Loading image list indices from {path_img2nsd}')
             return pd.read_csv(path_img2nsd)
         else:
             logger.info('File **images_to_csd.csv* not foudn for subject. Building image list indices...')
@@ -99,12 +98,12 @@ class NSDDataLoader:
         logger.info(f'Found {len(shared_category)} shared images with category {category}')
         return shared_category["listIdx"].values, shared_not_category["listIdx"].values
 
-    def get_train_test_indices(self):
+    def get_train_eval_indices(self):
         """
             Returns:
-                tuple: Two numpy arrays containing train and test indices respectively:
+                tuple: Two numpy arrays containing train and eval indices respectively:
                     - train_idxs (np.ndarray): Indices for training set (90% of data)
-                    - test_idxs (np.ndarray): Indices for test set (10% of data)
+                    - eval_idxs (np.ndarray): Indices for eval set (10% of data)
         """
         subject_df = self.subject_specific_df
         logger.info(f'Loaded {len(subject_df)} images for subject {self.subject}')
@@ -112,9 +111,9 @@ class NSDDataLoader:
         # on training, we don't want to use shared images
         subject_df = subject_df[subject_df['shared1000'] == False]
         logger.info(f'Excluded shared images from training set. {len(subject_df)} images remaining')
-        train_idxs, test_idxs = train_test_split(np.arange(len(subject_df)), test_size=0.1, random_state=42)
-        logger.info(f'Split data into {len(train_idxs)} training and {len(test_idxs)} testing indices')
-        return train_idxs, test_idxs
+        train_idxs, eval_idxs = train_test_split(np.arange(len(subject_df)), test_size=0.1, random_state=42)
+        logger.info(f'Split data into {len(train_idxs)} training and {len(eval_idxs)} validation indices')
+        return train_idxs, eval_idxs
 
 
     def z_score(self, data):
@@ -122,10 +121,10 @@ class NSDDataLoader:
 
     def get_split_masked_datasets(self, indices):
         """
-            Get training and test fMRI datasets for a specified subject and ROI class; mask the data by ROI.
+            Get training and eval fMRI datasets for a specified subject and ROI class; mask the data by ROI.
 
             Returns:
-                tuple: Two arrays containing train and test fMRI data respectively.
+                tuple: Two arrays containing train and eval fMRI data respectively.
                 For hem='all', arrays contain concatenated data from both hemispheres.
                 For hem='lh'/'rh', arrays contain data from specified hemisphere only.
         """
@@ -134,7 +133,7 @@ class NSDDataLoader:
         lh_fmri_path = os.path.join(fmri_base_path, "lh_training_fmri.npy")
         rh_fmri_path = os.path.join(fmri_base_path, "rh_training_fmri.npy")
 
-        # get the indices of the training and testing sets, or shared images
+        # get the indices of the training and evaling sets, or shared images
         first_idxs, sec_idxs = indices
         first_lh_fmri = jnp.load(lh_fmri_path)[first_idxs]
         first_rh_fmri = jnp.load(rh_fmri_path)[first_idxs]
@@ -142,7 +141,7 @@ class NSDDataLoader:
         sec_rh_fmri = jnp.load(rh_fmri_path)[sec_idxs]
 
         # get the ROI mask
-        roi_data = load_roi_data(self.subject)
+        roi_data = load_roi_data(self.data_dir, self.subject)
         roi_lh, roi_rh = roi_data['challenge']['lh'][self.roi_class] > 0, roi_data['challenge']['rh'][self.roi_class] > 0
 
         # mask the data by ROI
@@ -153,9 +152,9 @@ class NSDDataLoader:
 
         if self.hem == 'all':
             train_all_fmri = np.concatenate([first_lh_fmri, first_rh_fmri], axis=1)
-            test_all_fmri = np.concatenate([sec_lh_fmri, sec_rh_fmri], axis=1)
+            eval_all_fmri = np.concatenate([sec_lh_fmri, sec_rh_fmri], axis=1)
             logger.info(f'Loaded all hemisphere data with shape {train_all_fmri.shape}')
-            return self.z_score(train_all_fmri), self.z_score(test_all_fmri)
+            return self.z_score(train_all_fmri), self.z_score(eval_all_fmri)
         elif self.hem == 'lh':
             logger.info(f'Loaded left hemisphere data with shape {first_lh_fmri.shape}')
             return self.z_score(first_lh_fmri), self.z_score(sec_lh_fmri)
@@ -165,8 +164,8 @@ class NSDDataLoader:
         else:
             raise ValueError(f"Invalid hemisphere selection: {self.hem}. Must be 'all', 'lh', or 'rh'.")
 
-    def get_train_test_datasets(self):
-        indices = self.get_train_test_indices()
+    def get_train_eval_datasets(self):
+        indices = self.get_train_eval_indices()
         return self.get_split_masked_datasets(indices)
 
     def get_analysis_datasets(self, category):
@@ -186,13 +185,12 @@ class NSDDataLoader:
 
         num_samples = fmri.shape[0]
         permutation = random.permutation(key, num_samples // batch_size * batch_size)
-        logger.info(f"permutatin first: {permutation[:5]}")
         return fmri[permutation]
 
 #
 # track image list indices in dataframe
 # def images_to_nsd_df(subject=3):
-#     # training and test images list, sorted
+#     # training and eval images list, sorted
 #     images_path = os.path.join("../data", "subj0"+str(subject), "training_split", "training_images")
 #     images = sorted(os.listdir(images_path))
 
@@ -209,7 +207,7 @@ class NSDDataLoader:
 #     # log(f"total images for subject {subject}: {len(images_to_nsd)}", 'DATA')
 #     return images_to_nsd
 
-# # get indices for the training, test and analysis split
+# # get indices for the training, eval and analysis split
 # def get_shared_indices(category: str = 'person', subject: int = 3):
 #     images_to_nsd = images_to_nsd_df(subject=subject)
 #     coco_loaded = cl.nsd_coco
@@ -222,17 +220,17 @@ class NSDDataLoader:
 #     not_category_idxs = shared_not_category["listIdx"].values
 #     return category_idxs, not_category_idxs
 
-# def get_train_test_indices(subject=3):
+# def get_train_eval_indices(subject=3):
 #     """
-#     Get the image indices for training and testing sets for a given subject.
+#     Get the image indices for training and evaling sets for a given subject.
 
 #     Args:
 #         subject (int, optional): Subject ID number (1-8). Defaults to 3.
 
 #     Returns:
-#         tuple: Two numpy arrays containing train and test indices respectively:
+#         tuple: Two numpy arrays containing train and eval indices respectively:
 #             - train_idxs (np.ndarray): Indices for training set (90% of data)
-#             - test_idxs (np.ndarray): Indices for test set (10% of data)
+#             - eval_idxs (np.ndarray): Indices for eval set (10% of data)
 #     """
 
 #     # map coco categories to the pics in the dataset
@@ -241,8 +239,8 @@ class NSDDataLoader:
 #     subject_coco_df = cl.getSubjDf(coco_loaded, subject)
 #     subject_images = pd.merge(images_to_nsd, subject_coco_df, left_on="nsdId", right_on="nsdId", how="inner")
 
-#     train_idxs, test_idxs = train_test_split(np.arange(len(subject_images)), test_size=0.1, random_state=42)
-#     return train_idxs, test_idxs
+#     train_idxs, eval_idxs = train_eval_split(np.arange(len(subject_images)), eval_size=0.1, random_state=42)
+#     return train_idxs, eval_idxs
 
 # #  normalise data
 # # def normalise(_max, _min, data):
@@ -253,7 +251,7 @@ class NSDDataLoader:
 
 # #  get dataset splits based on indices
 # def get_split_masked_datasets(indices, subject, roi_class='floc-bodies', hem: Literal["all", "lh", "rh"]='lh') -> tuple:
-#     """Get training and test fMRI datasets for a specified subject and ROI class.
+#     """Get training and eval fMRI datasets for a specified subject and ROI class.
 
 #     Args:
 #         subject (int, optional): The subject ID number (1-8). Defaults to 3.
@@ -261,9 +259,9 @@ class NSDDataLoader:
 #         hem (str, optional): Hemisphere selection ('all', 'lh', or 'rh'). Defaults to 'all'.
 
 #     Returns:
-#         tuple: Two arrays containing train and test fMRI data respectively:
+#         tuple: Two arrays containing train and eval fMRI data respectively:
 #             - train_fmri: Training fMRI data array
-#             - test_fmri: Test fMRI data array
+#             - eval_fmri: Test fMRI data array
 #             For hem='all', arrays contain concatenated data from both hemispheres.
 #             For hem='lh'/'rh', arrays contain data from specified hemisphere only.
 #     """
@@ -273,12 +271,12 @@ class NSDDataLoader:
 #     lh_fmri_path = os.path.join(fmri_base_path, "lh_training_fmri.npy")
 #     rh_fmri_path = os.path.join(fmri_base_path, "rh_training_fmri.npy")
 
-#     # get the indices for training and testing
+#     # get the indices for training and evaling
 #     first_idxs, sec_idxs = indices
 
 #     # load the fmri data, sliced by indexes
 #     # ndr: for one image, there is both the left and right hemisphere (I mean not necessarily, but yea)
-#     # ndr pt2: first and sec is kind of saying train and test, but it's not really that
+#     # ndr pt2: first and sec is kind of saying train and eval, but it's not really that
 #     first_lh_fmri = jnp.load(lh_fmri_path)[first_idxs]
 #     first_rh_fmri = jnp.load(rh_fmri_path)[first_idxs]
 
@@ -297,8 +295,8 @@ class NSDDataLoader:
 
 #     if hem == 'all':
 #         train_all_fmri = np.concatenate([first_lh_fmri, first_rh_fmri], axis=1)
-#         test_all_fmri = np.concatenate([sec_lh_fmri, sec_rh_fmri], axis=1)
-#         return z_score(train_all_fmri), z_score(test_all_fmri)
+#         eval_all_fmri = np.concatenate([sec_lh_fmri, sec_rh_fmri], axis=1)
+#         return z_score(train_all_fmri), z_score(eval_all_fmri)
 
 #     elif hem == 'lh':
 #         return z_score(first_lh_fmri), z_score(sec_lh_fmri)
@@ -309,16 +307,16 @@ class NSDDataLoader:
 #     else:
 #         raise ValueError(f"Invalid hemisphere selection: {hem}. Must be 'all', 'lh', or 'rh'.")
 
-# def get_train_test_datasets(subject, roi_class='floc-bodies', hem: Literal["all", "lh", "rh"]='lh') -> tuple:
+# def get_train_eval_datasets(subject, roi_class='floc-bodies', hem: Literal["all", "lh", "rh"]='lh') -> tuple:
 #     """
 #     Args:
 #         subject (int, optional): The subject ID number (1-8). Defaults to 3.
 #         roi_class (str, optional): Region of interest class name. Defaults to 'floc-bodies'.
 #         hem (str, optional): Hemisphere selection ('all', 'lh', or 'rh'). Defaults to 'all'.
 #     Returns:
-#         tuple: Two arrays containing train and test fMRI data respectively.
+#         tuple: Two arrays containing train and eval fMRI data respectively.
 #     """
-#     indices = get_train_test_indices(subject)
+#     indices = get_train_eval_indices(subject)
 #     return get_split_masked_datasets(indices, subject, roi_class, hem)
 
 # # aka get shared-images fmri data?
@@ -336,17 +334,17 @@ class NSDDataLoader:
 #     return get_split_masked_datasets(indices, subject, roi_class, hem)
 
 # #
-# def get_train_test_mnist():
+# def get_train_eval_mnist():
 #     # load the mnist dataset from tfds
 #     mnist = tfds.load("mnist", split='train')
 #     x_data = jnp.array([x["image"] for x in tfds.as_numpy(mnist)]).reshape(-1, 28*28)
 #     x_data = x_data / 255.0
 #     print(f"mnist shape: {x_data.shape}")
-#     train, test = train_test_split(np.arange(len(x_data)), test_size=0.2, random_state=42)
-#     print(f"train_ds length: {len(train)}, test_ds {len(test)}")
-#     return x_data[train], x_data[test]
+#     train, eval = train_eval_split(np.arange(len(x_data)), eval_size=0.2, random_state=42)
+#     print(f"train_ds length: {len(train)}, eval_ds {len(eval)}")
+#     return x_data[train], x_data[eval]
 
-# def get_train_test_cifar10():
+# def get_train_eval_cifar10():
 #     def rgb2gray(rgb):
 #         return np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])
 
@@ -355,9 +353,9 @@ class NSDDataLoader:
 #     x_data = jnp.array([rgb2gray(x["image"]) for x in tfds.as_numpy(cifar)]).reshape(-1, 32*32)
 #     x_data = x_data / 255.0
 #     print(f"cifar shape: {x_data.shape}")
-#     train, test = train_test_split(np.arange(len(x_data)), test_size=0.2, random_state=42)
-#     print(f"train_ds length: {len(train)}, test_ds {len(test)}")
-#     return x_data[train], x_data[test]
+#     train, eval = train_eval_split(np.arange(len(x_data)), eval_size=0.2, random_state=42)
+#     print(f"train_ds length: {len(train)}, eval_ds {len(eval)}")
+#     return x_data[train], x_data[eval]
 
 
 # #  split data into lh and rh
