@@ -1,7 +1,14 @@
 # Neuroscience meets ML
 Building models to encode human brain.
 
+![](https://github.com/bragg13/autoencoded-fmri-nsd/blob/main/img10_15_subj3.png)
+
+*On the left, an image from COCO, specifically #10 and #15.*
+
+*On the right, 2D visualisation of fMRI BOLD signal in left and right hemisphere while looking at the image, plotted on a flat FreeSurfer's fsaverage.*
+
 Originally, final project for Artificial Intelligence for Games and Simulations.
+
 
 ## Setting up the environment
 1. Install python version 3.11.10
