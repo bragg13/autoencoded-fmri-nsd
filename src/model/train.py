@@ -1,5 +1,6 @@
 """Training and evaluation logic."""
 import aim
+import numpy as np
 import models
 import jax
 from jax import random
@@ -13,7 +14,8 @@ import jaxpruner
 import ml_collections
 import orbax.checkpoint as ocp
 import logging
-# from visual.visualisations import LatentVisualizer
+from visual.surface import get_fmri_vector, map_fmri_on_brain_surface, get_surface_mesh, plot_roi
+from data.roi import get_fmri_data_roi
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +26,7 @@ class TrainState(train_state.TrainState):
 
 def create_train_state(key, init_data, config, fmri_voxels):
     """Creates initial `TrainState`."""
-    model = models.model(config.latent_dim, fmri_voxels)
+    model = models.model(config['latent_dim'], fmri_voxels)
     variables = model.init(
         {"params": key, "dropout": key}, init_data, dropout_rng=key, training=True
     )
@@ -32,11 +34,11 @@ def create_train_state(key, init_data, config, fmri_voxels):
     # introducing sparsity
     sparsity_config = ml_collections.ConfigDict()
     sparsity_config.algorithm = "static_sparse"
-    sparsity_config.sparsity = config.sparsity
+    sparsity_config.sparsity = config['sparsity']
     sparsity_config.dist_type = "erk"
 
     sparsity_updater = jaxpruner.create_updater_from_config(sparsity_config)
-    tx = optax.adamw(config.learning_rate)
+    tx = optax.adamw(config['learning_rate'])
     tx = sparsity_updater.wrap_optax(tx)
 
     return TrainState.create(
@@ -49,7 +51,7 @@ def create_train_state(key, init_data, config, fmri_voxels):
 
 def compute_metrics(recon_x, x, latent_vec, config):
     mse_loss = jnp.mean(jnp.square(recon_x - x))
-    sparsity_loss = config.l1 * jnp.mean(jnp.abs(latent_vec))
+    sparsity_loss = config['l1'] * jnp.mean(jnp.abs(latent_vec))
     return {"mse_loss": mse_loss, "sparsity_loss": sparsity_loss}
 
 
@@ -72,7 +74,7 @@ def train_step(state, batch, key, config):
         fmri_voxels = batch.shape[1]
         variables = {"params": params, "batch_stats": state.batch_stats}
         (recon_x, latent_vec), new_model_state = models.model(
-            config.latent_dim, fmri_voxels
+        config['latent_dim'], fmri_voxels
         ).apply(
             variables,
             batch,
@@ -84,7 +86,7 @@ def train_step(state, batch, key, config):
 
         # MSE loss and L1 regularization for sparsity in the latent vector
         mse_loss = jnp.mean(jnp.square(recon_x - batch))
-        sparsity_loss = config.l1 * jnp.mean(jnp.abs(latent_vec))
+        sparsity_loss = config['l1'] * jnp.mean(jnp.abs(latent_vec))
         total_loss = mse_loss + sparsity_loss
 
         return total_loss, (
@@ -121,7 +123,7 @@ def evaluate_fun(state, evaluation_batch, key, config):
     def eval_model(batch):
         variables = {"params": state.params, "batch_stats": state.batch_stats}
         (reconstruction, latent_vecs), _ = models.model(
-            config.latent_dim, batch.shape[1]
+            config['latent_dim'], batch.shape[1]
         ).apply(
             variables,
             batch,
@@ -138,9 +140,17 @@ def evaluate_fun(state, evaluation_batch, key, config):
 
 def train_and_evaluate(config, env_config):
     """Train and evaulate pipeline."""
+    bs = config['batch_size']
     rng = random.key(0)
     rng, init_key = random.split(rng)
     # PROJECT_DIR = env_config['PROJECT_DIR']
+
+    # initialise all the surface stuff
+    lh_fmri, rh_fmri = get_fmri_vector()
+    challenge_roi, fsaverage_roi = get_fmri_data_roi(subj=config['subject'], roi_class=config['roi_class'], hemisphere=config['hem'])
+    response = map_fmri_on_brain_surface(challenge_roi, fsaverage_roi, config['hem'], lh_fmri, rh_fmri, img_index=config['img'])
+    coords, response, faces = get_surface_mesh(response, hemisphere=config['hem'])
+    plot_roi(coords, response, title=f"{config['hem']} hemisphere - image {config['img']} - {config['roi_class']}")
 
     # initialise AIM run
     run = aim.Run()
@@ -149,21 +159,21 @@ def train_and_evaluate(config, env_config):
     # initialise dataset
     logger.info("Initializing dataset...")
     rate_reconstruction_printing = 10
-    nsd_loader = NSDDataLoader(env_config["DATASET_DIR"], subject=config.subject, roi_class=config.roi_class, hem=config.hem)
-    train_ds, validation_ds = nsd_loader.get_train_test_datasets()
+    nsd_loader = NSDDataLoader(env_config["DATASET_DIR"], subject=config['subject'], roi_class=config['roi_class'], hem=config['hem'])
+    train_ds, validation_ds = nsd_loader.get_train_eval_datasets()
 
     logger.info(f"training ds shape: {train_ds.shape}")
     logger.info(f"test ds shape: {validation_ds.shape}")
 
     key1, key2 = random.split(rng)
-    train_loader = nsd_loader.get_batches(train_ds, key1, config.batch_size)
-    validation_loader = nsd_loader.get_batches(validation_ds, key2, config.batch_size)
+    train_loader = nsd_loader.get_batches(train_ds, key1, config['batch_size'])
+    validation_loader = nsd_loader.get_batches(validation_ds, key2, config['batch_size'])
 
     train_size = train_ds.shape[0]
     fmri_voxels = train_ds.shape[1]
 
     logger.info("Initializing model...")
-    init_data = jnp.ones((config.batch_size, fmri_voxels), jnp.float32)
+    init_data = jnp.ones((config['batch_size'], fmri_voxels), jnp.float32)
 
     logger.info("Initializing state...")
     state, sparsity_updater = create_train_state(
@@ -171,10 +181,10 @@ def train_and_evaluate(config, env_config):
     )
 
     logger.info(f"Calculating training steps per epochs (train_size: {train_size})...")
-    steps_per_epoch = train_size // int(config.batch_size)
-    if train_size % int(config.batch_size) != 0:
+    steps_per_epoch = train_size // int(config['batch_size'])
+    if train_size % int(config['batch_size']) != 0:
         steps_per_epoch += 1
-    logger.info(f"{steps_per_epoch} steps for each ({config.num_epochs}) epoch")
+    logger.info(f"{steps_per_epoch} steps for each ({config['num_epochs']}) epoch")
 
     train_mse_losses = []
     train_spa_losses = []
@@ -195,16 +205,25 @@ def train_and_evaluate(config, env_config):
 
     # init aim hyperparameters
     run['hparams'] = {
-        'batch_size': config.batch_size,
-        'learning_rate': config.learning_rate,
-        'latent_dim': config.latent_dim,
-        'sparsity': config.sparsity,
-        'l1': config.l1,
-        'num_epochs': config.num_epochs,
-        'subject': config.subject,
-        'hemisphere': config.hem,
-        'roi_class': config.roi_class,
+        'batch_size': config['batch_size'],
+        'learning_rate': config['learning_rate'],
+        'latent_dim': config['latent_dim'],
+        'sparsity': config['sparsity'],
+        'l1': config['l1'],
+        'num_epochs': config['num_epochs'],
+        'subject': config['subject'],
+        'hemisphere': config['hem'],
+        'roi_class': config['roi_class'],
     }
+
+    # initialise all the surface stuff
+    lh_fmri, rh_fmri = get_fmri_vector()
+    challenge_roi, fsaverage_roi = get_fmri_data_roi(subj=config['subject'], roi_class=config['roi_class'], hemisphere=config['hem'])
+    response = map_fmri_on_brain_surface(challenge_roi, fsaverage_roi, config['hem'], lh_fmri, rh_fmri, img_index=config['img'])
+    coords, response, faces = get_surface_mesh(response, hemisphere=config['hem'])
+    plot_roi(coords, response, title=f"{config['hem']} hemisphere - image {config['img']} - {config['roi_class']}")
+
+
 
     logger.info("starting training")
     print()
@@ -215,8 +234,8 @@ def train_and_evaluate(config, env_config):
 
         # im reshuffling also the first time, which is useless but I think the code is cleaner
         key1, key2 = random.split(rng)
-        train_loader = nsd_loader.get_batches(train_ds, key1, config.batch_size)
-        validation_loader = nsd_loader.get_batches(validation_ds, key2, config.batch_size)
+        train_loader = nsd_loader.get_batches(train_ds, key1, bs)
+        validation_loader = nsd_loader.get_batches(validation_ds, key2, bs)
 
         # pre_op = jax.jit(sparsity_updater.pre_forward_update)
         post_op = jax.jit(sparsity_updater.post_gradient_update)
@@ -226,10 +245,10 @@ def train_and_evaluate(config, env_config):
         # Training loop
         for step in (
             pbar := tqdm(
-                range(0, len(train_loader), config.batch_size), total=steps_per_epoch
+                range(0, len(train_loader), bs), total=steps_per_epoch
             )
         ):
-            batch = train_loader[step : step + config.batch_size]
+            batch = train_loader[step : step + bs]
             state, losses = train_step_jit(state, batch, epoch_key, config)
             mse_loss, spa_loss = losses["mse_loss"], losses["sparsity_loss"]
 
@@ -243,9 +262,9 @@ def train_and_evaluate(config, env_config):
 
             if step % (steps_per_epoch // 5) == 0:
                 validation_batch = validation_loader[
-                    validation_step : validation_step + config.batch_size
+                    validation_step : validation_step + bs
                 ]
-                validation_step = +config.batch_size
+                validation_step = +bs
 
                 metrics, (evaluated_batches, reconstructions), latent_vecs = (
                     evaluate_fun_jit(state, validation_batch, epoch_key, config)
@@ -261,8 +280,6 @@ def train_and_evaluate(config, env_config):
 
                 eval_losses.append(metrics["mse_loss"])
                 val_loss = metrics["mse_loss"]
-                # print(jaxpruner.summarize_sparsity(
-                #             state.params, only_total_sparsity=True))
 
             pbar.set_description(
                 f"epoch {epoch} mse loss: {str(mse_loss)[:5]} spa loss: {str(spa_loss)[:5]} val_loss: {str(val_loss)[:5]}"
@@ -271,16 +288,13 @@ def train_and_evaluate(config, env_config):
         # once every 10 epochs, plot the original and reconstructed images of the last batch
         if epoch % rate_reconstruction_printing == 0:
             validation_batch = validation_loader[
-                validation_step : validation_step + config.batch_size
+                validation_step : validation_step + bs
             ]
-            validation_step = +config.batch_size
+            validation_step = +bs
             metrics, (evaluated_batches, reconstructions), latent_vecs = evaluate_fun(
                 state, validation_batch, epoch_key, config
             )
 
-            # plot_original_reconstruction(evaluated_batches, reconstructions, config, epoch)
-            # visualize_latent_activations(latent_vecs, evaluated_batches, config.results_folder,epoch)
-            # plot_latent_heatmap(latent_vecs, evaluated_batches, config.results_folder,epoch)
 
     run.close()
 
@@ -289,18 +303,4 @@ def train_and_evaluate(config, env_config):
     #     f"{PROJECT_DIR}/{config.results_folder}/checkpoints"
     # )
     # checkpointer.save(ckpt_folder / "final", state)
-    # plot_losses(
-    #     train_mse_losses,
-    #     train_spa_losses,
-    #     config.results_folder,
-    #     eval_losses,
-    #     steps_per_epoch,
-    # )
-    # plot_original_reconstruction_fmri(config.subject, evaluated_batches, reconstructions, config.hem)
-    # visualize_latent_activations(
-    #     latent_vecs, evaluated_batches, config, epoch
-    # )
-    # plot_latent_heatmap(latent_vecs, evaluated_batches, config, epoch)
-    # visualizer.plot_training_history()
-    # plot_floc_bodies_values_distribution(train_ds, 'train')
-    # plot_floc_bodies_values_distribution(validation_ds, 'validation')
+    plot_original_reconstruction_fmri(config.subject, evaluated_batches, reconstructions, config.hem)

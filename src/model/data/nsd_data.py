@@ -7,6 +7,9 @@ from sklearn.model_selection import train_test_split
 from data.roi import load_roi_data
 import logging
 from data.coco_load import CocoLoader
+from nilearn import datasets, plotting
+from nilearn.surface import load_surf_mesh
+from typing import Literal
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -115,7 +118,6 @@ class NSDDataLoader:
         logger.info(f'Split data into {len(train_idxs)} training and {len(eval_idxs)} validation indices')
         return train_idxs, eval_idxs
 
-
     def z_score(self, data):
         return jnp.array((data - data.mean()) / data.std())
 
@@ -187,203 +189,33 @@ class NSDDataLoader:
         permutation = random.permutation(key, num_samples // batch_size * batch_size)
         return fmri[permutation]
 
-#
-# track image list indices in dataframe
-# def images_to_nsd_df(subject=3):
-#     # training and eval images list, sorted
-#     images_path = os.path.join("../data", "subj0"+str(subject), "training_split", "training_images")
-#     images = sorted(os.listdir(images_path))
+    def fsa_fn(data, cfg, idx):
+        class_name, roi_id
 
-#     # make a dataframe with mapping image-nsd_index
-#     images_to_nsd= {}
-#     for i, filename in enumerate(images):
-#         start_i = filename.find("nsd-") + len("nds-")
-#         nsd_index = int(filename[start_i : start_i + 5])
-#         images_to_nsd[i] = [i, nsd_index]
-#     images_to_nsd = pd.DataFrame.from_dict(
-#         images_to_nsd, orient="index", columns=["listIdx", "nsdId"] # we need listIdx for the shared indices
-
-#     )
-#     # log(f"total images for subject {subject}: {len(images_to_nsd)}", 'DATA')
-#     return images_to_nsd
-
-# # get indices for the training, eval and analysis split
-# def get_shared_indices(category: str = 'person', subject: int = 3):
-#     images_to_nsd = images_to_nsd_df(subject=subject)
-#     coco_loaded = cl.nsd_coco
-#     shared_df = cl.getSharedDf(coco_loaded).merge(images_to_nsd, on='nsdId')
-#     shared_category, shared_not_category = cl.splitByCategory(shared_df, category)
-#     # category and not indices
-#     # print(shared_category[:5])
-#     # print(shared_not_category[:5])
-#     category_idxs = shared_category["listIdx"].values
-#     not_category_idxs = shared_not_category["listIdx"].values
-#     return category_idxs, not_category_idxs
-
-# def get_train_eval_indices(subject=3):
-#     """
-#     Get the image indices for training and evaling sets for a given subject.
-
-#     Args:
-#         subject (int, optional): Subject ID number (1-8). Defaults to 3.
-
-#     Returns:
-#         tuple: Two numpy arrays containing train and eval indices respectively:
-#             - train_idxs (np.ndarray): Indices for training set (90% of data)
-#             - eval_idxs (np.ndarray): Indices for eval set (10% of data)
-#     """
-
-#     # map coco categories to the pics in the dataset
-#     images_to_nsd = images_to_nsd_df(subject)
-#     coco_loaded = cl.nsd_coco
-#     subject_coco_df = cl.getSubjDf(coco_loaded, subject)
-#     subject_images = pd.merge(images_to_nsd, subject_coco_df, left_on="nsdId", right_on="nsdId", how="inner")
-
-#     train_idxs, eval_idxs = train_eval_split(np.arange(len(subject_images)), eval_size=0.1, random_state=42)
-#     return train_idxs, eval_idxs
-
-# #  normalise data
-# # def normalise(_max, _min, data):
-# #    return jnp.array((data - _min) / (_max - _min))
-# def z_score(data):
-#     normalised = jnp.array((data - data.mean()) / data.std())
-#     return normalised
-
-# #  get dataset splits based on indices
-# def get_split_masked_datasets(indices, subject, roi_class='floc-bodies', hem: Literal["all", "lh", "rh"]='lh') -> tuple:
-#     """Get training and eval fMRI datasets for a specified subject and ROI class.
-
-#     Args:
-#         subject (int, optional): The subject ID number (1-8). Defaults to 3.
-#         roi_class (str, optional): Region of interest class name. Defaults to 'floc-bodies'.
-#         hem (str, optional): Hemisphere selection ('all', 'lh', or 'rh'). Defaults to 'all'.
-
-#     Returns:
-#         tuple: Two arrays containing train and eval fMRI data respectively:
-#             - train_fmri: Training fMRI data array
-#             - eval_fmri: Test fMRI data array
-#             For hem='all', arrays contain concatenated data from both hemispheres.
-#             For hem='lh'/'rh', arrays contain data from specified hemisphere only.
-#     """
-#     log('creating datasets...', 'DATA')
-#     # get the paths to the fmri data
-#     fmri_base_path = os.path.join("../data", "subj0"+str(subject), "training_split", "training_fmri")
-#     lh_fmri_path = os.path.join(fmri_base_path, "lh_training_fmri.npy")
-#     rh_fmri_path = os.path.join(fmri_base_path, "rh_training_fmri.npy")
-
-#     # get the indices for training and evaling
-#     first_idxs, sec_idxs = indices
-
-#     # load the fmri data, sliced by indexes
-#     # ndr: for one image, there is both the left and right hemisphere (I mean not necessarily, but yea)
-#     # ndr pt2: first and sec is kind of saying train and eval, but it's not really that
-#     first_lh_fmri = jnp.load(lh_fmri_path)[first_idxs]
-#     first_rh_fmri = jnp.load(rh_fmri_path)[first_idxs]
-
-#     sec_lh_fmri = jnp.load(lh_fmri_path)[sec_idxs]
-#     sec_rh_fmri = jnp.load(rh_fmri_path)[sec_idxs]
-
-#     # get the ROI mask
-#     roi_data = load_roi_data(subject)
-#     # maske the data by ROI
-#     roi_lh, roi_rh = roi_data['challenge']['lh'][roi_class] > 0, roi_data['challenge']['rh'][roi_class] > 0
-
-#     first_lh_fmri = first_lh_fmri[:, roi_lh]
-#     first_rh_fmri = first_rh_fmri[:, roi_rh]
-#     sec_lh_fmri = sec_lh_fmri[:, roi_lh]
-#     sec_rh_fmri = sec_rh_fmri[:, roi_rh]
-
-#     if hem == 'all':
-#         train_all_fmri = np.concatenate([first_lh_fmri, first_rh_fmri], axis=1)
-#         eval_all_fmri = np.concatenate([sec_lh_fmri, sec_rh_fmri], axis=1)
-#         return z_score(train_all_fmri), z_score(eval_all_fmri)
-
-#     elif hem == 'lh':
-#         return z_score(first_lh_fmri), z_score(sec_lh_fmri)
-
-#     elif hem == 'rh':
-#         return z_score(first_rh_fmri), z_score(sec_rh_fmri)
-
-#     else:
-#         raise ValueError(f"Invalid hemisphere selection: {hem}. Must be 'all', 'lh', or 'rh'.")
-
-# def get_train_eval_datasets(subject, roi_class='floc-bodies', hem: Literal["all", "lh", "rh"]='lh') -> tuple:
-#     """
-#     Args:
-#         subject (int, optional): The subject ID number (1-8). Defaults to 3.
-#         roi_class (str, optional): Region of interest class name. Defaults to 'floc-bodies'.
-#         hem (str, optional): Hemisphere selection ('all', 'lh', or 'rh'). Defaults to 'all'.
-#     Returns:
-#         tuple: Two arrays containing train and eval fMRI data respectively.
-#     """
-#     indices = get_train_eval_indices(subject)
-#     return get_split_masked_datasets(indices, subject, roi_class, hem)
-
-# # aka get shared-images fmri data?
-# def get_analysis_datasets(category, subject, roi_class='floc-bodies', hem: Literal["all", "lh", "rh"]='lh') -> tuple:
-#     """
-#     Args:
-#         category (str, optional): The coco category. # Defaults to 'person'.
-#         subject (int, optional): The subject ID number (1-8). Defaults to 3.
-#         roi_class (str, optional): Region of interest class name. Defaults to 'floc-bodies'.
-#         hem (str, optional): Hemisphere selection ('all', 'lh', or 'rh'). Defaults to 'all'.
-#     Returns:
-#         tuple: Two arrays containing fMRI data resulted from shared images of category and not-category respectively.
-#     """
-#     indices = get_shared_indices(category, subject) # category and not category indices
-#     return get_split_masked_datasets(indices, subject, roi_class, hem)
-
-# #
-# def get_train_eval_mnist():
-#     # load the mnist dataset from tfds
-#     mnist = tfds.load("mnist", split='train')
-#     x_data = jnp.array([x["image"] for x in tfds.as_numpy(mnist)]).reshape(-1, 28*28)
-#     x_data = x_data / 255.0
-#     print(f"mnist shape: {x_data.shape}")
-#     train, eval = train_eval_split(np.arange(len(x_data)), eval_size=0.2, random_state=42)
-#     print(f"train_ds length: {len(train)}, eval_ds {len(eval)}")
-#     return x_data[train], x_data[eval]
-
-# def get_train_eval_cifar10():
-#     def rgb2gray(rgb):
-#         return np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])
-
-#     # load the mnist dataset from tfds
-#     cifar = tfds.load("cifar10", split='train')
-#     x_data = jnp.array([rgb2gray(x["image"]) for x in tfds.as_numpy(cifar)]).reshape(-1, 32*32)
-#     x_data = x_data / 255.0
-#     print(f"cifar shape: {x_data.shape}")
-#     train, eval = train_eval_split(np.arange(len(x_data)), eval_size=0.2, random_state=42)
-#     print(f"train_ds length: {len(train)}, eval_ds {len(eval)}")
-#     return x_data[train], x_data[eval]
+    def get_mesh_data(self, hem: Literal["all", "lh", "rh"]):
+        ATLAS = datasets.fetch_surf_fsaverage("fsaverage")
+        coords, faces = load_surf_mesh(ATLAS["flat_lh"])
+        fsa = fsa_fn(data, cfg, idx)
 
 
-# #  split data into lh and rh
-# def split_hemispheres(fmri, split_idx=19004):
-#     """
-#     Args:
-#         split_idx (int): length of the subject's lh challenge space. Defaults to 19004 (true for most subjects).
-#     """
-#     return fmri[:, :split_idx], fmri[:, split_idx:]
-
-# #  unmask data to original challenge space
-# def unmask_from_roi_class(subject, masked, roi_class, hem: Literal["all", "lh", "rh"], lh_chal_space_size=19004, rh_chal_space_size=20544):
-#     """
-#     Args:
-#         lh_chal_space_size (int, optional): length of the subject's lh challenge space. Defaults to 19004 (true for subjects 1,2,3,4,5,7).
-#         rh_chal_space_size (int, optional): length of the subject's rh challenge space. Defaults to 20544 (true for subjects 1,2,3,4,5,7).
-#     """
-#     roi_data = load_roi_data(subject)
-#     if hem == 'all':
-#         roi_lh = roi_data['challenge']['lh'][roi_class] > 0
-#         roi_rh = roi_data['challenge']['rh'][roi_class] > 0
-#         roi_mask = np.concatenate([roi_lh, roi_rh], axis=0)
-#         unmasked = np.zeros((masked.shape[0], lh_chal_space_size+rh_chal_space_size))
-#     elif hem == 'lh':
-#         roi_mask = roi_data['challenge']['lh'][roi_class] > 0
-#         unmasked = np.zeros((masked.shape[0], lh_chal_space_size))
-#     elif hem == 'rh':
-#         roi_mask = roi_data['challenge']['rh'][roi_class] > 0
-#         unmasked = np.zeros((masked.shape[0], rh_chal_space_size))
-#     unmasked[:, roi_mask] = masked
-#     return unmasked
+    #  unmask data to original challenge space
+    def unmask_from_roi_class(self, masked, roi_class, hem: Literal["all", "lh", "rh"], lh_chal_space_size=19004, rh_chal_space_size=20544):
+        """
+        Args:
+            lh_chal_space_size (int, optional): length of the subject's lh challenge space. Defaults to 19004 (true for subjects 1,2,3,4,5,7).
+            rh_chal_space_size (int, optional): length of the subject's rh challenge space. Defaults to 20544 (true for subjects 1,2,3,4,5,7).
+        """
+        roi_data = load_roi_data(self.data_dir, self.subject)
+        if hem == 'all':
+            roi_lh = roi_data['challenge']['lh'][roi_class] > 0
+            roi_rh = roi_data['challenge']['rh'][roi_class] > 0
+            roi_mask = np.concatenate([roi_lh, roi_rh], axis=0)
+            unmasked = np.zeros((masked.shape[0], lh_chal_space_size+rh_chal_space_size))
+        elif hem == 'lh':
+            roi_mask = roi_data['challenge']['lh'][roi_class] > 0
+            unmasked = np.zeros((masked.shape[0], lh_chal_space_size))
+        elif hem == 'rh':
+            roi_mask = roi_data['challenge']['rh'][roi_class] > 0
+            unmasked = np.zeros((masked.shape[0], rh_chal_space_size))
+        unmasked[:, roi_mask] = masked
+        return unmasked

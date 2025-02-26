@@ -16,6 +16,39 @@ ROI_TO_CLASS = {roi: roi_class for roi_class, rois in CLASS_TO_ROI.items() for r
 # List of all ROI names
 ROIS = [roi for roi_class in CLASS_TO_ROI.values() for roi in roi_class]
 
+
+def get_fmri_data_roi(subj: int = 3, roi_class: str = 'floc-bodies', hemisphere: str = 'lh', base_dir: str = './dataset/nsd_data'):
+    """
+    Load ROI masks for a specific subject, ROI, and hemisphere.
+
+    Returns:
+        Tuple of (challenge_roi, fsaverage_roi) arrays.
+    """
+    subj_str = f"subj0{subj}"
+    data_dir = os.path.join(base_dir, subj_str)
+    # For file naming, append a period (e.g., 'lh.' for left)
+    hemi_prefix = hemisphere + '.'
+
+    challenge_roi_path = os.path.join(data_dir, 'roi_masks', hemi_prefix + roi_class + '_challenge_space.npy')
+    fsaverage_roi_path = os.path.join(data_dir, 'roi_masks', hemisphere[0] + 'h.' + roi_class + '_fsaverage_space.npy')
+    # roi_map_path = os.path.join(data_dir, 'roi_masks', 'mapping_' + roi_class + '.npy')
+
+    challenge_roi_class = np.load(challenge_roi_path)
+    fsaverage_roi_class = np.load(fsaverage_roi_path)
+    # print how many vertices are 0
+    print(f"Number of 0 vertices in challenge space: {np.sum(challenge_roi_class == 0)}")
+    print(f"Number of 0 vertices in fsaverage space: {np.sum(fsaverage_roi_class == 0)}")
+
+    # roi_map = np.load(roi_map_path, allow_pickle=True).item()
+
+    # Get the mapping for the ROI name
+    # roi_mapping = list(roi_map.keys())[list(roi_map.values()).index(roi)]
+    # print(f"ROI mapping for : {roi_mapping}")
+    # challenge_roi = (challenge_roi_class == roi_mapping).astype(int)
+    # fsaverage_roi = (fsaverage_roi_class == roi_mapping).astype(int)
+
+    return challenge_roi_class, fsaverage_roi_class
+
 def load_roi_data(dataDir, subject=3):
     """
     Loads ROI data structures for specified subject
