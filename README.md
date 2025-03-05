@@ -27,6 +27,9 @@ For each subject, we trained a Sparse Autoencoder (SAE) on BOLD signals from the
 The result was a set of 8 trained models, one for each subject, which we used for inference with the _shared_ images (test set). We performed inference with ~600 images, equally separated between _person_ and _non-person_ categories. 
 We plotted the resulting vectors with t-SNE, observing different distributions based on the category, which the model was completely unaware of during training.
 
+<img width="890" alt="image" src="https://github.com/user-attachments/assets/b89bf725-b0a1-4b2c-b02d-2fec443c267c" />
+_Note: greyed-out squares are non-significant subjects_
+
 Nevertheless, this does not allow us to state that it specifically encodes information about this categorization. Natural scene images present a large spectrum of different features, which in turn result in complex activation patterns in the brain. Those features most likely overlap for person and non-person stimuli, making it difficult for the model to distinguish categories.
 
 Moreover, this is a very small-scale experiment, and we specifically selected _floc-bodies_ because it is known in the literature to be sensitive to stimuli containing bodies. Our results suggest that our sparse autoencoder, trained on activations within the _floc-bodies_ region, might be able to capture information about whether the participant was looking at an image with or without a human body in it.
