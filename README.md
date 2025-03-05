@@ -9,6 +9,30 @@ Building models to encode human brain.
 
 Originally, final project for Artificial Intelligence for Games and Simulations.
 
+## TL;DR
+We trained models to encode the most relevant features of some fMRI data (training set) into a latent vector. The fMRI data is obtained while subjects look at images, which can contain a human or not.
+Our model was not explicitly trained to separate the two categories; it just encodes highly complex fMRI data into a small vector. 
+By performing inference on known-category data (test set), we observe encoded vectors to be distinguishable based on the category.
+
+## Research Idea, Methods, and Results
+
+The [Natural Scenes Dataset](https://naturalscenesdataset.org/) is a large-scale fMRI dataset conducted at ultra-high-field (7T) strength. The dataset consists of whole-brain, high-resolution (1.8-mm isotropic, 1.6-s sampling rate) fMRI measurements of 8 healthy adult subjects while they viewed thousands of color natural scenes. (adapt. from their website)
+
+The images are part of the [COCO dataset](https://cocodataset.org/#home) and are labeled with category. In particular, we were interested in those which contained a person/human body, categorised as _person_, and those which did not.
+Additionally, every subject viewed a total of ~10000 images; a small part was _shared_ by all the participants (~1000 images), while the others were _subject-specific_ , ie. only seen by that subject.
+We selected a specific Region of Interest (ROI) in the Visual Cortex called [floc-bodies](http://vpnl.stanford.edu/fLoc/), which specialises in recognising human bodies.
+
+For each subject, we trained a Sparse Autoencoder (SAE) on BOLD signals from the subject-specific images (our training set). This way, it learned to extract key features of the brain state of subjects while looking at images. 
+
+The result was a set of 8 trained models, one for each subject, which we used for inference with the _shared_ images (test set). We performed inference with ~600 images, equally separated between _person_ and _non-person_ categories. 
+We plotted the resulting vectors with t-SNE, observing different distributions based on the category, which the model was completely unaware of during training.
+
+Nevertheless, this does not allow us to state that it specifically encodes information about this categorization. Natural scene images present a large spectrum of different features, which in turn result in complex activation patterns in the brain. Those features most likely overlap for person and non-person stimuli, making it difficult for the model to distinguish categories.
+
+Moreover, this is a very small-scale experiment, and we specifically selected _floc-bodies_ because it is known in the literature to be sensitive to stimuli containing bodies. Our results suggest that our sparse autoencoder, trained on activations within the _floc-bodies_ region, might be able to capture information about whether the participant was looking at an image with or without a human body in it.
+
+More detailed information can be found on our [Research Report](https://github.com/bragg13/autoencoded-fmri-nsd/blob/dev/NeuroscienceMeetsML.pdf).
+
 
 ## Setting up the environment
 1. Install python version 3.11.10
